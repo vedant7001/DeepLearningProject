@@ -1,0 +1,112 @@
+# Deep Learning Question Answering System
+
+This notebook will help you run the QA system on Google Colab.
+
+## Setup
+
+First, make sure you're using a GPU runtime:
+1. Click Runtime in the menu
+2. Choose "Change runtime type"
+3. Select "GPU" from the Hardware accelerator dropdown
+4. Click Save
+
+Now run these cells in sequence:
+
+```python
+# Clone the repository
+!git clone https://github.com/vedant7001/DeepLearningProject.git
+%cd DeepLearningProject
+```
+
+```python
+# Install dependencies
+!pip install torch transformers numpy tqdm tensorboard pandas scikit-learn matplotlib wandb pytest
+```
+
+```python
+# Setup Python path and check GPU
+import sys
+import os
+sys.path.append(os.getcwd())
+
+# Verify GPU
+import torch
+print(f"GPU available: {torch.cuda.is_available()}")
+if torch.cuda.is_available():
+    print(f"GPU device: {torch.cuda.get_device_name(0)}")
+```
+
+## Configuration
+
+```python
+# Training configuration
+config = {
+    'model_type': 'lstm',  # Options: 'lstm', 'attn', 'transformer'
+    'batch_size': 16,
+    'num_epochs': 20,
+    'embedding_size': 128,
+    'hidden_size': 256,
+    'learning_rate': 3e-4,
+    'dropout': 0.3,
+    'num_layers': 2
+}
+```
+
+## Training
+
+```python
+# Import and run training
+from training.train import train
+
+# Create output directory
+output_dir = 'Result/model_outputs'
+os.makedirs(output_dir, exist_ok=True)
+
+# Start training
+train(
+    model_type=config['model_type'],
+    tokenizer_name='bert-base-uncased',
+    output_dir=output_dir,
+    train_batch_size=config['batch_size'],
+    num_epochs=config['num_epochs'],
+    embed_size=config['embedding_size'],
+    hidden_size=config['hidden_size'],
+    learning_rate=config['learning_rate'],
+    dropout=config['dropout'],
+    num_layers=config['num_layers']
+)
+```
+
+## Inference
+
+```python
+# Run inference
+from training.predict import predict
+
+# Load the best model
+model_path = os.path.join(output_dir, f"{config['model_type']}_model_best.pt")
+
+# Example usage
+context = """The quick brown fox jumps over the lazy dog. The dog was sleeping in the sun."""
+question = "What did the fox do?"
+
+answer = predict(
+    model_path=model_path,
+    question=question,
+    context=context,
+    model_type=config['model_type']
+)
+
+print(f"Question: {question}")
+print(f"Answer: {answer}")
+```
+
+## Save Results
+
+```python
+# Zip the results directory
+!zip -r /content/model_results.zip Result/
+
+# The file 'model_results.zip' will appear in the Files panel on the left.
+# You can download it by right-clicking and selecting 'Download'
+``` 
