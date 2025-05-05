@@ -26,7 +26,7 @@ notebook = {
             "execution_count": None,
             "metadata": {},
             "outputs": [],
-            "source": "# Setup Python path and check GPU\nimport sys\nimport os\nsys.path.append(os.getcwd())\n\n# Verify GPU\nimport torch\nprint(f\"GPU available: {torch.cuda.is_available()}\")\nif torch.cuda.is_available():\n    print(f\"GPU device: {torch.cuda.get_device_name(0)}\")"
+            "source": "# Setup Python path properly\nimport sys\nimport os\n\n# Get current working directory\n!pwd\n\n# Add the current directory to the Python path\nsys.path.insert(0, os.getcwd())\n\n# Create empty __init__.py files to make directories importable\n!touch __init__.py\n!touch training/__init__.py\n!touch models/__init__.py\n!touch utils/__init__.py\n\n# Verify paths\nprint(f\"Python path: {sys.path}\")\nprint(f\"Directory contents: {os.listdir()}\")\nprint(f\"Training directory contents: {os.listdir('training')}\")\n\n# Verify GPU\nimport torch\nprint(f\"GPU available: {torch.cuda.is_available()}\")\nif torch.cuda.is_available():\n    print(f\"GPU device: {torch.cuda.get_device_name(0)}\")"
         },
         {
             "cell_type": "markdown",
@@ -43,6 +43,18 @@ notebook = {
         {
             "cell_type": "markdown",
             "metadata": {},
+            "source": "## Direct Import Test"
+        },
+        {
+            "cell_type": "code",
+            "execution_count": None,
+            "metadata": {},
+            "outputs": [],
+            "source": "# Test imports directly\ntry:\n    import training\n    print(\"✅ Successfully imported training module\")\n    print(f\"Training module path: {training.__file__}\")\n    \n    import training.train\n    print(\"✅ Successfully imported training.train module\")\n    print(f\"Training.train module path: {training.train.__file__}\")\n    \n    from training.train import train\n    print(\"✅ Successfully imported train function\")\n    \n    import models\n    print(\"✅ Successfully imported models module\")\n    \n    import utils\n    print(\"✅ Successfully imported utils module\")\nexcept Exception as e:\n    print(f\"❌ Import failed: {e}\")"
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {},
             "source": "## Training"
         },
         {
@@ -50,7 +62,7 @@ notebook = {
             "execution_count": None,
             "metadata": {},
             "outputs": [],
-            "source": "# Import and run training\nfrom training.train import train\n\n# Create output directory\noutput_dir = 'Result/model_outputs'\nos.makedirs(output_dir, exist_ok=True)\n\n# Start training\ntrain(\n    model_type=config['model_type'],\n    tokenizer_name='bert-base-uncased',\n    output_dir=output_dir,\n    train_batch_size=config['batch_size'],\n    num_epochs=config['num_epochs'],\n    embed_size=config['embedding_size'],\n    hidden_size=config['hidden_size'],\n    learning_rate=config['learning_rate'],\n    dropout=config['dropout'],\n    num_layers=config['num_layers']\n)"
+            "source": "# Import and run training\ntry:\n    from training.train import train\n\n    # Create output directory\n    output_dir = 'Result/model_outputs'\n    os.makedirs(output_dir, exist_ok=True)\n\n    # Start training\n    train(\n        model_type=config['model_type'],\n        tokenizer_name='bert-base-uncased',\n        output_dir=output_dir,\n        train_batch_size=config['batch_size'],\n        num_epochs=config['num_epochs'],\n        embed_size=config['embedding_size'],\n        hidden_size=config['hidden_size'],\n        learning_rate=config['learning_rate'],\n        dropout=config['dropout'],\n        num_layers=config['num_layers']\n    )\nexcept Exception as e:\n    print(f\"❌ Training failed: {e}\")"
         },
         {
             "cell_type": "markdown",
@@ -62,7 +74,7 @@ notebook = {
             "execution_count": None,
             "metadata": {},
             "outputs": [],
-            "source": "# Run inference\nfrom training.predict import predict\n\n# Load the best model\nmodel_path = os.path.join(output_dir, f\"{config['model_type']}_model_best.pt\")\n\n# Example usage\ncontext = \"\"\"The quick brown fox jumps over the lazy dog. The dog was sleeping in the sun.\"\"\"\nquestion = \"What did the fox do?\"\n\nanswer = predict(\n    model_path=model_path,\n    question=question,\n    context=context,\n    model_type=config['model_type']\n)\n\nprint(f\"Question: {question}\")\nprint(f\"Answer: {answer}\")"
+            "source": "# Run inference\ntry:\n    from training.predict import predict\n\n    # Load the best model\n    model_path = os.path.join(output_dir, f\"{config['model_type']}_model_best.pt\")\n\n    # Example usage\n    context = \"\"\"The quick brown fox jumps over the lazy dog. The dog was sleeping in the sun.\"\"\"\n    question = \"What did the fox do?\"\n\n    answer = predict(\n        model_path=model_path,\n        question=question,\n        context=context,\n        model_type=config['model_type']\n    )\n\n    print(f\"Question: {question}\")\n    print(f\"Answer: {answer}\")\nexcept Exception as e:\n    print(f\"❌ Inference failed: {e}\")"
         }
     ],
     "metadata": {
