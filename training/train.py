@@ -126,7 +126,7 @@ def train_epoch(
     optimizer: torch.optim.Optimizer,
     scheduler: Optional[torch.optim.lr_scheduler._LRScheduler],
     device: torch.device,
-    gradient_clip: float = 1.0
+    clip_grad_norm: float = 1.0
 ) -> Tuple[float, List[float]]:
     """Train for one epoch"""
     model.train()
@@ -139,23 +139,44 @@ def train_epoch(
         batch = {k: v.to(device) if isinstance(v, torch.Tensor) else v 
                 for k, v in batch.items()}
         
+        # Extract and handle the start and end positions
+        start_positions = batch.get('answer_start')
+        
+        # For QA tasks, we often need to calculate the end position based on the start position
+        # and answer length. However, if end positions are already provided, use those.
+        end_positions = batch.get('answer_end')
+        if end_positions is None and start_positions is not None and 'answer_text' in batch:
+            # For simplicity, we could approximate end positions by adding the length of answer text
+            # to start position. This is a simplification as token lengths may differ.
+            # In a real implementation, tokenize the answer text and get its length.
+            end_positions = start_positions + 1  # Default fallback is 1 token after start
+        
         # Forward pass
         outputs = model(
             input_ids=batch['input_ids'],
             attention_mask=batch['attention_mask'],
-            start_positions=batch.get('answer_start'),
-            end_positions=batch.get('answer_start')  # This will be adjusted in the model
+            start_positions=start_positions,
+            end_positions=end_positions
         )
         
-        loss = outputs.loss
+        # Extract loss from outputs
+        if isinstance(outputs, dict):
+            loss = outputs.get('loss')
+        else:
+            # For compatibility with models that return loss directly
+            loss = outputs
+            
+        if loss is None:
+            # Fallback in case model doesn't compute loss internally
+            continue
         
         # Backward pass
         optimizer.zero_grad()
         loss.backward()
         
         # Gradient clipping
-        if gradient_clip > 0:
-            torch.nn.utils.clip_grad_norm_(model.parameters(), gradient_clip)
+        if clip_grad_norm > 0:
+            torch.nn.utils.clip_grad_norm_(model.parameters(), clip_grad_norm)
         
         optimizer.step()
         if scheduler:
@@ -191,10 +212,35 @@ def evaluate(
                 attention_mask=batch['attention_mask']
             )
             
-            # Store predictions and labels
-            all_predictions.extend(outputs.predictions)
-            if 'answer_text' in batch:
-                all_labels.extend(batch['answer_text'])
+            # Extract predictions from outputs
+            if isinstance(outputs, dict):
+                start_logits = outputs.get('start_logits')
+                end_logits = outputs.get('end_logits')
+                
+                # Get the most likely start and end positions
+                start_indices = torch.argmax(start_logits, dim=1)
+                end_indices = torch.argmax(end_logits, dim=1)
+                
+                # Create prediction pairs
+                for i in range(len(start_indices)):
+                    start_idx = start_indices[i].item()
+                    end_idx = end_indices[i].item()
+                    
+                    # Make sure end comes after start
+                    if end_idx < start_idx:
+                        end_idx = start_idx
+                    
+                    # Extract the predicted answer
+                    answer_tokens = batch['input_ids'][i][start_idx:end_idx+1]
+                    all_predictions.append((start_idx, end_idx))
+            else:
+                # For compatibility with models that might return predictions directly
+                all_predictions.extend(outputs.get('predictions', []))
+            
+            # Store labels if available
+            if 'answer_start' in batch and 'answer_text' in batch:
+                for start_idx, answer_text in zip(batch['answer_start'], batch['answer_text']):
+                    all_labels.append((start_idx.item(), answer_text))
     
     # Compute metrics
     metrics = compute_metrics(all_predictions, all_labels) if all_labels else {}
@@ -212,13 +258,14 @@ def train(
     weight_decay: float = 0.01,
     warmup_steps: int = 1000,
     max_length: int = 384,
-    gradient_clip: float = 1.0,
+    clip_grad_norm: float = 1.0,
     num_workers: int = 2,
     embed_size: int = 128,
     hidden_size: int = 256,
     num_layers: int = 2,
     dropout: float = 0.3,
-    seed: int = 42
+    seed: int = 42,
+    **kwargs  # Accept additional keyword arguments
 ) -> None:
     """Main training function"""
     
@@ -243,12 +290,14 @@ def train(
     ).to(device)
     
     # Get dataloaders
+    use_v2 = kwargs.get('use_v2', False)
     train_dataloader = get_squad_dataloader(
         "train",
         tokenizer_name,
         train_batch_size,
         max_length=max_length,
-        num_workers=num_workers
+        num_workers=num_workers,
+        use_v2=use_v2
     )
     
     eval_dataloader = get_squad_dataloader(
@@ -257,7 +306,8 @@ def train(
         eval_batch_size,
         shuffle=False,
         max_length=max_length,
-        num_workers=num_workers
+        num_workers=num_workers,
+        use_v2=use_v2
     )
     
     # Setup optimizer and scheduler
@@ -276,6 +326,7 @@ def train(
     
     # Training loop
     best_metric = float('-inf')
+    checkpoint_every = kwargs.get('checkpoint_every', 1)
     for epoch in range(num_epochs):
         logger.info(f"\nEpoch {epoch + 1}/{num_epochs}")
         
@@ -286,7 +337,7 @@ def train(
             optimizer,
             scheduler,
             device,
-            gradient_clip
+            clip_grad_norm
         )
         logger.info(f"Training loss: {train_loss:.4f}")
         
@@ -303,15 +354,16 @@ def train(
             logger.info(f"Saved best model to {model_path}")
         
         # Save checkpoint
-        checkpoint_path = os.path.join(output_dir, f"{model_type}_checkpoint_epoch_{epoch+1}.pt")
-        torch.save({
-            'epoch': epoch,
-            'model_state_dict': model.state_dict(),
-            'optimizer_state_dict': optimizer.state_dict(),
-            'scheduler_state_dict': scheduler.state_dict(),
-            'train_loss': train_loss,
-            'metrics': metrics
-        }, checkpoint_path)
+        if (epoch + 1) % checkpoint_every == 0:
+            checkpoint_path = os.path.join(output_dir, f"{model_type}_checkpoint_epoch_{epoch+1}.pt")
+            torch.save({
+                'epoch': epoch,
+                'model_state_dict': model.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+                'scheduler_state_dict': scheduler.state_dict(),
+                'train_loss': train_loss,
+                'metrics': metrics
+            }, checkpoint_path)
         
     logger.info("Training completed!")
 

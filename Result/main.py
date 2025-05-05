@@ -155,17 +155,10 @@ def main():
             weight_decay=args.weight_decay,
             num_epochs=args.num_epochs,
             warmup_steps=args.warmup_steps,
-            clip_grad_norm=args.clip_grad_norm,
-            use_v2=args.use_v2,
-            checkpoint_every=args.checkpoint_every,
-            log_every=args.log_every,
-            model_size=args.model_size,
-            teacher_forcing_ratio=args.teacher_forcing_ratio,
             embed_size=args.embed_size,
             hidden_size=args.hidden_size,
             num_layers=args.num_layers,
             dropout=args.dropout,
-            save_attention=args.save_attention,
             seed=args.seed
         )
     
