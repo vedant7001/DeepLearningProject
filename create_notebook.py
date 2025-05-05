@@ -26,7 +26,7 @@ notebook = {
             "execution_count": None,
             "metadata": {},
             "outputs": [],
-            "source": "# Install dependencies\n!pip install torch transformers numpy tqdm tensorboard pandas scikit-learn matplotlib datasets"
+            "source": "# Install dependencies\n!pip install torch transformers numpy tqdm tensorboard pandas scikit-learn matplotlib datasets rouge_score nltk sacrebleu"
         },
         {
             "cell_type": "code",
@@ -105,7 +105,7 @@ notebook = {
             "execution_count": None,
             "metadata": {},
             "outputs": [],
-            "source": "# Training configuration\nconfig = {\n    'model_type': 'lstm',  # Options: 'lstm', 'attn', 'transformer'\n    'batch_size': 16,\n    'num_epochs': 20,\n    'embedding_size': 128,\n    'hidden_size': 256,\n    'learning_rate': 3e-4,\n    'dropout': 0.3,\n    'num_layers': 2\n}"
+            "source": "# Training configuration\nconfig = {\n    'model_type': 'lstm',  # Options: 'lstm', 'attn', 'transformer'\n    'batch_size': 8,  # Reduced batch size\n    'num_epochs': 20,\n    'embedding_size': 128,\n    'hidden_size': 256,\n    'learning_rate': 3e-4,\n    'dropout': 0.3,\n    'num_layers': 2,\n    'max_length': 384,  # Maximum sequence length (less than 512 to be safe)\n    'gradient_clip': 1.0,  # Add gradient clipping\n    'num_workers': 2  # Limit number of workers as suggested by warning\n}\n\n# Set CUDA settings for debugging\nimport os\nos.environ['CUDA_LAUNCH_BLOCKING'] = '1'  # For better error tracking\nos.environ['TOKENIZERS_PARALLELISM'] = 'false'  # Avoid tokenizer warnings"
         },
         {
             "cell_type": "markdown",
@@ -117,7 +117,7 @@ notebook = {
             "execution_count": None,
             "metadata": {},
             "outputs": [],
-            "source": "# Import and run training\ntry:\n    from training.train import train\n\n    # Create output directory\n    output_dir = 'Result/model_outputs'\n    os.makedirs(output_dir, exist_ok=True)\n\n    # Start training\n    train(\n        model_type=config['model_type'],\n        tokenizer_name='bert-base-uncased',\n        output_dir=output_dir,\n        train_batch_size=config['batch_size'],\n        eval_batch_size=config['batch_size'],  # Using same batch size for eval\n        num_epochs=config['num_epochs'],\n        embed_size=config['embedding_size'],\n        hidden_size=config['hidden_size'],\n        learning_rate=config['learning_rate'],\n        dropout=config['dropout'],\n        num_layers=config['num_layers'],\n        weight_decay=0.01,\n        warmup_steps=1000,\n        checkpoint_every=1,\n        log_every=100,\n        teacher_forcing_ratio=0.5,\n        save_attention=True,\n        model_size=\"base\",  # For transformer models\n        seed=42\n    )\nexcept Exception as e:\n    print(f\"❌ Training failed: {e}\")\n    import traceback\n    traceback.print_exc()"
+            "source": "# Import and run training\ntry:\n    from training.train import train\n    import torch\n\n    # Create output directory\n    output_dir = 'Result/model_outputs'\n    os.makedirs(output_dir, exist_ok=True)\n\n    # Enable gradient anomaly detection for debugging\n    torch.autograd.set_detect_anomaly(True)\n\n    # Start training\n    train(\n        model_type=config['model_type'],\n        tokenizer_name='bert-base-uncased',\n        output_dir=output_dir,\n        train_batch_size=config['batch_size'],\n        eval_batch_size=config['batch_size'],\n        num_epochs=config['num_epochs'],\n        embed_size=config['embedding_size'],\n        hidden_size=config['hidden_size'],\n        learning_rate=config['learning_rate'],\n        dropout=config['dropout'],\n        num_layers=config['num_layers'],\n        weight_decay=0.01,\n        warmup_steps=1000,\n        checkpoint_every=1,\n        log_every=100,\n        teacher_forcing_ratio=0.5,\n        save_attention=True,\n        model_size=\"base\",\n        max_length=config['max_length'],\n        gradient_clip=config['gradient_clip'],\n        num_workers=config['num_workers'],\n        seed=42\n    )\nexcept Exception as e:\n    print(f\"❌ Training failed: {e}\")\n    import traceback\n    traceback.print_exc()"
         },
         {
             "cell_type": "markdown",
